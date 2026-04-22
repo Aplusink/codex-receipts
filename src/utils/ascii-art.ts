@@ -2,12 +2,14 @@
  * ASCII art headers for receipts
  */
 
-export const CLAUDE_LOGO = `     ▐▛███▜▌
-    ▝▜█████▛▘
-      ▘▘ ▝▝   `;
+export const CLAUDE_LOGO = `  ______ ____  ____  ______ _  __
+ / ____// __ \\/ __ \\/ ____/| |/ /
+/ /    / / / / / / / __/   |   /
+/ /___ / /_/ / /_/ / /___  /   |
+\\____/ \\____/_____/_____/ /_/|_|`;
 
 /**
- * Get the Claude logo
+ * Get the Codex logo
  */
 export function getHeader(): string {
   return CLAUDE_LOGO;

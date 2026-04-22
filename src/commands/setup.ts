@@ -1,46 +1,27 @@
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import { existsSync } from "fs";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import chalk from "chalk";
-import prompts from "prompts";
 import ora from "ora";
-import { ConfigManager } from "../core/config-manager.js";
-import type { ReceiptConfig } from "../types/config.js";
 
-interface ClaudeSettings {
-  hooks?: {
-    SessionEnd?: Array<{
-      hooks: Array<{
-        type: string;
-        command: string;
-      }>;
-    }>;
-    [key: string]: unknown;
-  };
-  [key: string]: unknown;
-}
+const execFileAsync = promisify(execFile);
 
 export interface SetupOptions {
-  uninstall?: boolean;
+  codexWatch?: boolean;
+  uninstallCodexWatch?: boolean;
 }
 
 export class SetupCommand {
-  private configManager = new ConfigManager();
-  private settingsPath: string;
-
-  constructor() {
-    const home = process.env.HOME || process.env.USERPROFILE || "";
-    this.settingsPath = join(home, ".claude", "settings.json");
-  }
-
   async execute(options: SetupOptions): Promise<void> {
-    console.log(chalk.cyan.bold("\nClaude Receipts Setup\n"));
+    console.log(chalk.cyan.bold("\nCodex Receipts Setup\n"));
 
     try {
-      if (options.uninstall) {
-        await this.uninstall();
+      if (options.uninstallCodexWatch) {
+        await this.uninstallCodexWatcher();
       } else {
-        await this.install();
+        await this.installCodexWatcher();
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -52,218 +33,110 @@ export class SetupCommand {
     }
   }
 
-  /**
-   * Install the SessionEnd hook
-   */
-  private async install(): Promise<void> {
-    // Prompt user for configuration
-    const answers = await prompts([
-      {
-        type: "text",
-        name: "location",
-        message: "Default location (leave blank to auto-detect):",
-        initial: "",
-      },
-      {
-        type: "multiselect",
-        name: "outputs",
-        message: "Output formats for the SessionEnd hook:",
-        choices: [
-          { title: "HTML (opens in browser)", value: "html", selected: true },
-          { title: "Thermal printer", value: "printer" },
-        ],
-        hint: "- Space to select, Enter to confirm",
-        instructions: false,
-      },
-    ]);
-
-    // User cancelled
-    if (answers.location === undefined || answers.outputs === undefined) {
-      console.log(chalk.yellow("\nSetup cancelled"));
-      return;
+  private async installCodexWatcher(): Promise<void> {
+    if (process.platform !== "darwin") {
+      throw new Error("Codex watcher setup currently supports macOS LaunchAgents only.");
     }
 
-    const outputs: string[] =
-      answers.outputs.length > 0 ? answers.outputs : ["html"];
-
-    const spinner = ora("Setting up hook...").start();
+    const spinner = ora("Installing Codex watcher LaunchAgent...").start();
+    const plistPath = this.getCodexWatcherPlistPath();
+    const nodePath = process.execPath;
+    const cliPath = resolve(process.argv[1] || "bin/codex-receipts.js");
+    const logDir = join(process.env.HOME || "", ".codex-receipts", "logs");
 
     try {
-      // Create config
-      const config: ReceiptConfig = {
-        version: "1.0.0",
-        location: answers.location || undefined,
-      };
+      await mkdir(dirname(plistPath), { recursive: true });
+      await mkdir(logDir, { recursive: true });
 
-      await this.configManager.saveConfig(config);
-      spinner.text = "Config saved...";
+      const plist = this.buildCodexWatcherPlist({
+        nodePath,
+        cliPath,
+        intervalSeconds: 60,
+        stdoutPath: join(logDir, "codex-watch.out.log"),
+        stderrPath: join(logDir, "codex-watch.err.log"),
+      });
 
-      // Modify settings.json
-      await this.addHookToSettings(outputs);
-      spinner.text = "Hook installed...";
+      await writeFile(plistPath, plist, "utf-8");
 
-      spinner.succeed("Setup complete!");
+      await execFileAsync("launchctl", ["bootout", `gui/${process.getuid?.()}`, plistPath]).catch(() => undefined);
+      await execFileAsync("launchctl", ["bootstrap", `gui/${process.getuid?.()}`, plistPath]);
+      await execFileAsync("launchctl", ["enable", `gui/${process.getuid?.()}/dev.codex-receipts.watch`]);
 
-      console.log(chalk.green("\n✓ SessionEnd hook installed"));
-      console.log(
-        chalk.gray(`  Outputs: ${outputs.join(", ")}`),
-      );
-      console.log(
-        chalk.gray(`  Config file: ${this.configManager.getConfigPath()}\n`),
-      );
-
-      const tips: string[] = [];
-      if (outputs.includes("html")) {
-        tips.push(
-          "HTML receipts will open in your browser when you exit Claude Code sessions",
-        );
-      }
-      if (outputs.includes("printer")) {
-        tips.push(
-          "Receipts will be sent to your thermal printer (configure with: claude-receipts config --set printer=<name>)",
-        );
-      }
-      console.log(chalk.cyan(tips.join("\n") + "\n"));
+      spinner.succeed("Codex watcher installed");
+      console.log(chalk.green("\n✓ Codex receipts will be generated after Codex closes"));
+      console.log(chalk.gray(`  LaunchAgent: ${plistPath}`));
+      console.log(chalk.gray(`  Logs: ${logDir}\n`));
     } catch (error) {
-      spinner.fail("Setup failed");
+      spinner.fail("Codex watcher setup failed");
       throw error;
     }
   }
 
-  /**
-   * Uninstall the SessionEnd hook
-   */
-  private async uninstall(): Promise<void> {
-    const spinner = ora("Removing hook...").start();
+  private async uninstallCodexWatcher(): Promise<void> {
+    const spinner = ora("Removing Codex watcher LaunchAgent...").start();
+    const plistPath = this.getCodexWatcherPlistPath();
 
     try {
-      await this.removeHookFromSettings();
-      spinner.succeed("Hook removed!");
+      await execFileAsync("launchctl", ["bootout", `gui/${process.getuid?.()}`, plistPath]).catch(() => undefined);
+      if (existsSync(plistPath)) {
+        await unlink(plistPath);
+      }
 
-      console.log(chalk.green("\n✓ SessionEnd hook uninstalled"));
-      console.log(
-        chalk.gray(
-          '  Config file preserved. Use "config --reset" to reset it.\n',
-        ),
-      );
+      spinner.succeed("Codex watcher removed");
+      console.log(chalk.green("\n✓ Codex watcher uninstalled\n"));
     } catch (error) {
-      spinner.fail("Uninstall failed");
+      spinner.fail("Codex watcher uninstall failed");
       throw error;
     }
   }
 
-  /**
-   * Add the SessionEnd hook to settings.json
-   */
-  private async addHookToSettings(outputs: string[]): Promise<void> {
-    // Ensure .claude directory exists
-    const claudeDir = join(this.settingsPath, "..");
-    if (!existsSync(claudeDir)) {
-      await mkdir(claudeDir, { recursive: true });
-    }
-
-    // Read existing settings
-    let settings: ClaudeSettings = {};
-
-    if (existsSync(this.settingsPath)) {
-      // Backup existing settings
-      const backupPath = `${this.settingsPath}.backup`;
-      const content = await readFile(this.settingsPath, "utf-8");
-      await writeFile(backupPath, content, "utf-8");
-
-      try {
-        settings = JSON.parse(content);
-      } catch {
-        throw new Error(
-          "Failed to parse existing settings.json. Please check the file format.",
-        );
-      }
-    }
-
-    // Initialize hooks if not present
-    if (!settings.hooks) {
-      settings.hooks = {};
-    }
-
-    if (!settings.hooks.SessionEnd) {
-      settings.hooks.SessionEnd = [];
-    }
-
-    // Check if our hook already exists
-    const hookCommand = "npx claude-receipts@latest generate";
-    const existingHook = settings.hooks.SessionEnd.find((h) =>
-      h.hooks.some((hook) => hook.command.includes("claude-receipts")),
-    );
-
-    if (existingHook) {
-      console.log(chalk.yellow("\n⚠ Hook already installed, updating..."));
-      // Remove old hook
-      settings.hooks.SessionEnd = settings.hooks.SessionEnd.filter(
-        (h) =>
-          !h.hooks.some((hook) => hook.command.includes("claude-receipts")),
-      );
-    }
-
-    // Add our hook
-    const outputArg = outputs.join(",");
-    settings.hooks.SessionEnd.push({
-      hooks: [
-        {
-          type: "command",
-          command: `${hookCommand} --output ${outputArg}`,
-        },
-      ],
-    });
-
-    // Write settings
-    await writeFile(
-      this.settingsPath,
-      JSON.stringify(settings, null, 2),
-      "utf-8",
-    );
+  private getCodexWatcherPlistPath(): string {
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    return join(home, "Library", "LaunchAgents", "dev.codex-receipts.watch.plist");
   }
 
-  /**
-   * Remove the SessionEnd hook from settings.json
-   */
-  private async removeHookFromSettings(): Promise<void> {
-    if (!existsSync(this.settingsPath)) {
-      throw new Error("settings.json not found. Hook may not be installed.");
-    }
+  private buildCodexWatcherPlist(options: {
+    nodePath: string;
+    cliPath: string;
+    intervalSeconds: number;
+    stdoutPath: string;
+    stderrPath: string;
+  }): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.codex-receipts.watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${this.escapePlist(options.nodePath)}</string>
+    <string>${this.escapePlist(options.cliPath)}</string>
+    <string>watch</string>
+    <string>--once</string>
+    <string>--only-when-codex-closed</string>
+    <string>--output</string>
+    <string>html</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>${options.intervalSeconds}</integer>
+  <key>StandardOutPath</key>
+  <string>${this.escapePlist(options.stdoutPath)}</string>
+  <key>StandardErrorPath</key>
+  <string>${this.escapePlist(options.stderrPath)}</string>
+</dict>
+</plist>
+`;
+  }
 
-    const content = await readFile(this.settingsPath, "utf-8");
-    let settings: ClaudeSettings;
-
-    try {
-      settings = JSON.parse(content);
-    } catch {
-      throw new Error("Failed to parse settings.json");
-    }
-
-    if (!settings.hooks?.SessionEnd) {
-      throw new Error("No SessionEnd hooks found in settings.json");
-    }
-
-    // Remove our hook
-    settings.hooks.SessionEnd = settings.hooks.SessionEnd.filter(
-      (h) => !h.hooks.some((hook) => hook.command.includes("claude-receipts")),
-    );
-
-    // Remove SessionEnd array if empty
-    if (settings.hooks.SessionEnd.length === 0) {
-      delete settings.hooks.SessionEnd;
-    }
-
-    // Remove hooks object if empty
-    if (Object.keys(settings.hooks).length === 0) {
-      delete settings.hooks;
-    }
-
-    // Write settings
-    await writeFile(
-      this.settingsPath,
-      JSON.stringify(settings, null, 2),
-      "utf-8",
-    );
+  private escapePlist(value: string): string {
+    return value
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
   }
 }

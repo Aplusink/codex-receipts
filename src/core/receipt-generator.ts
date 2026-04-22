@@ -1,4 +1,4 @@
-import type { CcusageSession } from "../types/ccusage.js";
+import type { UsageSession } from "../types/usage.js";
 import type { ParsedTranscript } from "../types/transcript.js";
 import type { ReceiptConfig } from "../types/config.js";
 import {
@@ -10,7 +10,7 @@ import {
 import { getHeader, SEPARATOR, LIGHT_SEPARATOR } from "../utils/ascii-art.js";
 
 export interface ReceiptData {
-  sessionData: CcusageSession;
+  sessionData: UsageSession;
   transcriptData: ParsedTranscript;
   location: string;
   config: ReceiptConfig;
@@ -32,7 +32,7 @@ export class ReceiptGenerator {
     // Location and session info
     lines.push(this.centerText(`Location: ${data.location}`, 35));
     lines.push(
-      this.centerText(`Session: ${data.transcriptData.sessionSlug}`, 35),
+      this.centerText(`Customer: ${this.getCustomer(data)}`, 35),
     );
     lines.push(
       this.centerText(
@@ -60,10 +60,11 @@ export class ReceiptGenerator {
           this.padLine(
             "  Input tokens",
             formatNumber(model.inputTokens),
-            this.formatTokenCost(
+            this.formatTokenLineCost(
+              model.modelName,
+              "input",
               model.inputTokens,
-              model.cost,
-              data.sessionData.totalTokens,
+              data.config,
             ),
           ),
         );
@@ -73,10 +74,11 @@ export class ReceiptGenerator {
           this.padLine(
             "  Output tokens",
             formatNumber(model.outputTokens),
-            this.formatTokenCost(
+            this.formatTokenLineCost(
+              model.modelName,
+              "output",
               model.outputTokens,
-              model.cost,
-              data.sessionData.totalTokens,
+              data.config,
             ),
           ),
         );
@@ -87,10 +89,11 @@ export class ReceiptGenerator {
             this.padLine(
               "  Cache write",
               formatNumber(model.cacheCreationTokens),
-              this.formatTokenCost(
+              this.formatTokenLineCost(
+                model.modelName,
+                "input",
                 model.cacheCreationTokens,
-                model.cost,
-                data.sessionData.totalTokens,
+                data.config,
               ),
             ),
           );
@@ -101,10 +104,11 @@ export class ReceiptGenerator {
             this.padLine(
               "  Cache read",
               formatNumber(model.cacheReadTokens),
-              this.formatTokenCost(
+              this.formatTokenLineCost(
+                model.modelName,
+                "cached",
                 model.cacheReadTokens,
-                model.cost,
-                data.sessionData.totalTokens,
+                data.config,
               ),
             ),
           );
@@ -196,17 +200,53 @@ export class ReceiptGenerator {
     return lines.join("\n");
   }
 
-  /**
-   * Format token cost (proportional to model cost)
-   */
-  private formatTokenCost(
+  private formatTokenLineCost(
+    modelName: string,
+    tokenType: "input" | "cached" | "output",
     tokens: number,
-    modelCost: number,
-    totalTokens: number,
+    config: ReceiptConfig,
   ): string {
-    const proportion = tokens / totalTokens;
-    const cost = modelCost * proportion;
-    return formatCurrency(cost);
+    const rates = this.getModelRates(modelName, config);
+    const rate =
+      tokenType === "output"
+        ? rates.outputUsdPerMillion
+        : tokenType === "cached"
+          ? rates.cachedInputUsdPerMillion
+          : rates.inputUsdPerMillion;
+
+    return formatCurrency((tokens / 1_000_000) * rate);
+  }
+
+  private getModelRates(
+    modelName: string,
+    config: ReceiptConfig,
+  ): {
+    inputUsdPerMillion: number;
+    cachedInputUsdPerMillion: number;
+    outputUsdPerMillion: number;
+  } {
+    const normalized = modelName.toLowerCase();
+    const defaults = normalized.includes("mini")
+      ? {
+          inputUsdPerMillion: 0.75,
+          cachedInputUsdPerMillion: 0.075,
+          outputUsdPerMillion: 4.5,
+        }
+      : {
+          inputUsdPerMillion: 2.5,
+          cachedInputUsdPerMillion: 0.25,
+          outputUsdPerMillion: 15,
+        };
+
+    return {
+      inputUsdPerMillion:
+        config.codexInputUsdPerMillion ?? defaults.inputUsdPerMillion,
+      cachedInputUsdPerMillion:
+        config.codexCachedInputUsdPerMillion ??
+        defaults.cachedInputUsdPerMillion,
+      outputUsdPerMillion:
+        config.codexOutputUsdPerMillion ?? defaults.outputUsdPerMillion,
+    };
   }
 
   /**
@@ -216,21 +256,13 @@ export class ReceiptGenerator {
     // Remove date suffixes and clean up model names
     const cleaned = model.replace(/-\d{8}$/, "");
 
-    const modelMap: Record<string, string> = {
-      "claude-sonnet-4-5": "Claude Sonnet 4.5",
-      "claude-opus-4-5": "Claude Opus 4.5",
-      "claude-3-5-sonnet": "Claude 3.5 Sonnet",
-      "claude-3-opus": "Claude 3 Opus",
-      "claude-3-haiku": "Claude 3 Haiku",
-    };
-
-    return modelMap[cleaned] || model;
+    return cleaned || model;
   }
 
   /**
    * Get the main model used in the session
    */
-  private getMainModel(sessionData: CcusageSession): string {
+  private getMainModel(sessionData: UsageSession): string {
     if (sessionData.modelBreakdowns && sessionData.modelBreakdowns.length > 0) {
       return this.getModelName(sessionData.modelBreakdowns[0].modelName);
     }
@@ -239,6 +271,10 @@ export class ReceiptGenerator {
       return this.getModelName(sessionData.modelsUsed[0]);
     }
 
-    return "Claude";
+    return "Codex";
+  }
+
+  private getCustomer(data: ReceiptData): string {
+    return data.config.customerName || data.transcriptData.sessionSlug;
   }
 }

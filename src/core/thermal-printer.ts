@@ -13,7 +13,7 @@ const execAsync = promisify(exec);
 const WIDTH = 40; // TM-T88V 80mm paper, Font A minus margin
 const LEFT_MARGIN_DOTS = 12; // 1 character width at 203 dpi
 
-const REPO_URL = "https://github.com/chrishutchinson/claude-receipts";
+const REPO_URL = "https://github.com/Aplusink/codex-receipts";
 
 // Epson USB vendor ID
 const EPSON_VENDOR_ID = 0x04b8;
@@ -63,7 +63,7 @@ class EscPosBuilder {
   }
 
   /**
-   * Print the Claude logo using CP437 block characters.
+   * Print the Codex logo using CP437 block characters.
    * 5-row character: solid head, eyes, wider arms, solid body, legs.
    */
   logo(): this {
@@ -235,7 +235,7 @@ export class ThermalPrinterRenderer {
     // --- Info ---
     b.align("center");
     b.line(`Location: ${data.location}`);
-    b.line(`Session: ${data.transcriptData.sessionSlug}`);
+    b.line(`Customer: ${data.config.customerName || data.transcriptData.sessionSlug}`);
     b.line(formatDateTime(data.transcriptData.endTime, data.config.timezone));
     b.line();
 
@@ -292,10 +292,10 @@ export class ThermalPrinterRenderer {
 
     // --- Repo QR code ---
     b.align("center");
-    b.line("Print your own Claude receipts:");
+    b.line("Print your own Codex receipts:");
     b.qrCode(REPO_URL, 4);
-    b.line("github.com/chrishutchinson");
-    b.line("/claude-receipts");
+    b.line("github.com/Aplusink");
+    b.line("/codex-receipts");
     b.line();
 
     // --- Cut ---
@@ -434,7 +434,7 @@ export class ThermalPrinterRenderer {
     const { join } = await import("path");
     const { tmpdir } = await import("os");
 
-    const tmpFile = join(tmpdir(), `claude-receipt-${Date.now()}.bin`);
+    const tmpFile = join(tmpdir(), `codex-receipt-${Date.now()}.bin`);
 
     try {
       await writeFile(tmpFile, buffer);
@@ -451,15 +451,7 @@ export class ThermalPrinterRenderer {
   private getModelName(model: string): string {
     const cleaned = model.replace(/-\d{8}$/, "");
 
-    const modelMap: Record<string, string> = {
-      "claude-sonnet-4-5": "Claude Sonnet 4.5",
-      "claude-opus-4-5": "Claude Opus 4.5",
-      "claude-3-5-sonnet": "Claude 3.5 Sonnet",
-      "claude-3-opus": "Claude 3 Opus",
-      "claude-3-haiku": "Claude 3 Haiku",
-    };
-
-    return modelMap[cleaned] || model;
+    return cleaned || model;
   }
 
   private getMainModel(sessionData: ReceiptData["sessionData"]): string {
@@ -471,6 +463,6 @@ export class ThermalPrinterRenderer {
       return this.getModelName(sessionData.modelsUsed[0]);
     }
 
-    return "Claude";
+    return "Codex";
   }
 }

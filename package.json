@@ -1,22 +1,22 @@
 {
-  "name": "claude-receipts",
+  "name": "codex-receipts",
   "version": "1.1.0",
-  "description": "Bring receipts from your Claude Code sessions",
+  "description": "Generate receipt-style summaries for local Codex sessions",
   "license": "MIT",
-  "author": "Chris Hutchinson <github.com/chrishutchinson>",
+  "author": "Codex Receipts contributors",
   "repository": {
     "type": "git",
-    "url": "https://github.com/chrishutchinson/claude-receipts.git"
+    "url": "git+https://github.com/Aplusink/codex-receipts.git"
   },
   "bugs": {
-    "url": "https://github.com/chrishutchinson/claude-receipts/issues"
+    "url": "https://github.com/Aplusink/codex-receipts/issues"
   },
-  "homepage": "https://github.com/chrishutchinson/claude-receipts#readme",
+  "homepage": "https://github.com/Aplusink/codex-receipts#readme",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "claude-receipts": "./bin/claude-receipts.js"
+    "codex-receipts": "./bin/codex-receipts.js"
   },
   "files": [
     "dist",
@@ -30,7 +30,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
-    "claude-code",
+    "codex",
     "receipt",
     "usage",
     "ai",
@@ -41,7 +41,6 @@
   },
   "dependencies": {
     "boxen": "^8.0.1",
-    "ccusage": "^18.0.5",
     "chalk": "^5.6.2",
     "commander": "^14.0.2",
     "date-fns": "^4.1.0",

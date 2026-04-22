@@ -50,13 +50,46 @@ export class ConfigCommand {
     const config = await this.configManager.loadConfig();
     const configPath = this.configManager.getConfigPath();
 
-    console.log(chalk.cyan.bold("\nClaude Receipts Configuration"));
+    console.log(chalk.cyan.bold("\nCodex Receipts Configuration"));
     console.log(chalk.gray(`Location: ${configPath}\n`));
 
     this.printConfigItem("Version", config.version);
+    this.printConfigItem("Customer", config.customerName || "(session id)");
     this.printConfigItem("Location", config.location || "(auto-detect)");
     this.printConfigItem("Timezone", config.timezone || "(system default)");
     this.printConfigItem("Printer", config.printer || "(not set)");
+    this.printConfigItem(
+      "Codex input $/M",
+      String(config.codexInputUsdPerMillion ?? "(auto)"),
+    );
+    this.printConfigItem(
+      "Codex cached $/M",
+      String(config.codexCachedInputUsdPerMillion || "(auto)"),
+    );
+    this.printConfigItem(
+      "Codex output $/M",
+      String(config.codexOutputUsdPerMillion || "(auto)"),
+    );
+    this.printConfigItem(
+      "Notion upload",
+      config.notionUpload ? "enabled" : "disabled",
+    );
+    this.printConfigItem(
+      "Notion page",
+      config.notionPageId || "(not set)",
+    );
+    this.printConfigItem(
+      "Notion database",
+      config.notionDatabaseId || "(not set)",
+    );
+    this.printConfigItem(
+      "Notion data source",
+      config.notionDataSourceId || "(not set)",
+    );
+    this.printConfigItem(
+      "Notion API key",
+      config.notionApiKey ? "(configured)" : "(not set)",
+    );
 
     console.log("");
   }
@@ -75,7 +108,20 @@ export class ConfigCommand {
     const trimmedKey = key.trim() as keyof ReceiptConfig;
 
     // Validate key
-    const validKeys: (keyof ReceiptConfig)[] = ["location", "timezone", "printer"];
+    const validKeys: (keyof ReceiptConfig)[] = [
+      "location",
+      "customerName",
+      "timezone",
+      "printer",
+      "codexInputUsdPerMillion",
+      "codexCachedInputUsdPerMillion",
+      "codexOutputUsdPerMillion",
+      "notionApiKey",
+      "notionPageId",
+      "notionDatabaseId",
+      "notionDataSourceId",
+      "notionUpload",
+    ];
 
     if (!validKeys.includes(trimmedKey)) {
       throw new Error(
@@ -84,9 +130,34 @@ export class ConfigCommand {
     }
 
     // Update config
-    await this.configManager.updateConfig(trimmedKey, value);
+    const numericKeys: (keyof ReceiptConfig)[] = [
+      "codexInputUsdPerMillion",
+      "codexCachedInputUsdPerMillion",
+      "codexOutputUsdPerMillion",
+    ];
+    const booleanKeys: (keyof ReceiptConfig)[] = ["notionUpload"];
+    const shouldUnset = value === "auto" || value === "default" || value === "unset";
+    const parsedValue = shouldUnset
+      ? undefined
+      : booleanKeys.includes(trimmedKey)
+      ? value === "true" || value === "yes" || value === "1" || value === "on"
+      : numericKeys.includes(trimmedKey)
+      ? Number.parseFloat(value)
+      : value;
 
-    console.log(chalk.green(`✓ Updated ${trimmedKey} = ${value}`));
+    if (
+      !shouldUnset &&
+      numericKeys.includes(trimmedKey) &&
+      (!Number.isFinite(parsedValue as number) || (parsedValue as number) < 0)
+    ) {
+      throw new Error(`${trimmedKey} must be a non-negative number`);
+    }
+
+    await this.configManager.updateConfig(trimmedKey, parsedValue);
+
+    const displayValue =
+      trimmedKey === "notionApiKey" && parsedValue ? "(configured)" : parsedValue;
+    console.log(chalk.green(`✓ Updated ${trimmedKey} = ${displayValue}`));
   }
 
   /**

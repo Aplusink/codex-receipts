@@ -9,7 +9,7 @@ export class ConfigManager {
 
   constructor() {
     const home = process.env.HOME || process.env.USERPROFILE || "";
-    this.configPath = join(home, ".claude-receipts.config.json");
+    this.configPath = join(home, ".codex-receipts.config.json");
   }
 
   /**

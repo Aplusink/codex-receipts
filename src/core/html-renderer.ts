@@ -74,7 +74,7 @@ export class HtmlRenderer {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Claude Receipt - ${data.transcriptData.sessionSlug}</title>
+  <title>Codex Receipt - ${data.transcriptData.sessionSlug}</title>
   <style>
     * {
       margin: 0;
@@ -163,6 +163,7 @@ export class HtmlRenderer {
       white-space: pre;
       display: inline-block;
       margin: 10px 0;
+      letter-spacing: 0;
     }
 
     .separator {
@@ -247,9 +248,10 @@ export class HtmlRenderer {
     .meta-row {
       color: #666;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 1px;
+      grid-template-columns: auto minmax(20px, 1fr) minmax(0, auto);
+      gap: 4px;
       text-align: left;
+      align-items: baseline;
     }
 
     .meta .dots {
@@ -261,6 +263,8 @@ export class HtmlRenderer {
 
     .meta .value {
       text-align: right;
+      max-width: 230px;
+      overflow-wrap: anywhere;
     }
 
     .download-link {
@@ -282,18 +286,7 @@ export class HtmlRenderer {
       background: #000;
     }
 
-    .generated-by {
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px dashed #999;
-    }
-
-    .share-section {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 10px;
-    }
+    .share-section { display: none; }
 
     .share-btn {
       background: #333;
@@ -403,16 +396,18 @@ export class HtmlRenderer {
   <div class="receipt-container">
     <div class="receipt">
       <div class="header">
-        <div class="logo"> ▐▛███▜▌
- ▝▜█████▛▘
- ▘▘ ▝▝
+        <div class="logo">  ______ ____  ____  ______ _  __
+ / ____// __ \/ __ \/ ____/| |/ /
+/ /    / / / / / / / __/   |   /
+/ /___ / /_/ / /_/ / /___  /   |
+\____/ \____/_____/_____/ /_/|_|
 </div>
         <div class="meta">
           <div class="meta-row">
             <div>Location</div><div class="dots">....................</div><div class="value">${this.escapeHtml(data.location)}</div>
           </div>
           <div class="meta-row">
-            <div>Session</div><div class="dots">....................</div><div class="value">${this.escapeHtml(data.transcriptData.sessionSlug)}</div>
+            <div>Customer</div><div class="dots">....................</div><div class="value">${this.escapeHtml(this.getCustomer(data))}</div>
           </div>
           <div class="meta-row">
             <div>Date</div><div class="dots">....................</div><div class="value">${formatDateTime(data.transcriptData.endTime, data.config.timezone)}</div>
@@ -434,33 +429,7 @@ export class HtmlRenderer {
       <div class="footer">
         <div>CASHIER: ${this.getMainModel(data)}</div>
         <div class="footer-message">Thank you for building!</div>
-        <div class="generated-by">
-          Print your own <strong>Claude receipts</strong> with<br>
-          <a href="https://github.com/chrishutchinson/claude-receipts" style="color: #333;">github.com/chrishutchinson/claude-receipts</a>
-        </div>
       </div>
-    </div>
-
-    <div class="share-section">
-      <button class="share-btn" id="share-btn" onclick="shareReceipt()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="18" cy="5" r="3"></circle>
-          <circle cx="6" cy="12" r="3"></circle>
-          <circle cx="18" cy="19" r="3"></circle>
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-        </svg>
-        <span id="share-btn-text">Share Publicly</span>
-      </button>
-
-      <div class="share-result" id="share-result">
-        <div class="share-url" id="share-url"></div>
-        <button class="copy-btn" id="copy-btn" onclick="copyShareLink()">
-          Copy Link
-        </button>
-      </div>
-
-      <div class="share-error" id="share-error"></div>
     </div>
   </div>
 
@@ -481,91 +450,11 @@ ${JSON.stringify(shareableData, null, 2)}
     });
 
     // Log receipt info
-    console.log('Claude Receipt Generated!');
-    console.log('Session:', '${this.escapeHtml(data.transcriptData.sessionSlug)}');
+    console.log('Codex Receipt Generated!');
+    console.log('Customer:', '${this.escapeHtml(this.getCustomer(data))}');
     console.log('Cost:', '${formatCurrency(data.sessionData.totalCost)}');
     console.log('Press ESC to close');
 
-    async function shareReceipt() {
-      const btn = document.getElementById('share-btn');
-      const btnText = document.getElementById('share-btn-text');
-      const resultDiv = document.getElementById('share-result');
-      const urlDiv = document.getElementById('share-url');
-      const errorDiv = document.getElementById('share-error');
-
-      // Reset state
-      resultDiv.classList.remove('visible');
-      errorDiv.textContent = '';
-      errorDiv.style.display = 'none';
-
-      // Get receipt data
-      const dataScript = document.getElementById('receipt-data');
-      const receiptData = JSON.parse(dataScript.textContent);
-
-      // Disable button and show loading
-      btn.disabled = true;
-      btnText.textContent = 'Sharing...';
-
-      try {
-        const response = await fetch(SHARE_API_URL + '/api/receipts', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(receiptData),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok) {
-          throw new Error(result.message || result.error || 'Failed to share receipt');
-        }
-
-        // Success
-        sharedUrl = result.url;
-        urlDiv.innerHTML = '<a href="' + sharedUrl + '" target="_blank">' + sharedUrl + '</a>';
-        resultDiv.classList.add('visible');
-
-        btn.classList.add('success');
-        btnText.textContent = 'Shared!';
-
-        // Keep button disabled since already shared
-        console.log('Receipt shared:', sharedUrl);
-
-      } catch (error) {
-        console.error('Share error:', error);
-
-        btn.classList.add('error');
-        btnText.textContent = 'Share Failed';
-        errorDiv.textContent = error.message;
-        errorDiv.style.display = 'block';
-
-        // Re-enable button after error
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.classList.remove('error');
-          btnText.textContent = 'Share Publicly';
-        }, 3000);
-      }
-    }
-
-    function copyShareLink() {
-      if (!sharedUrl) return;
-
-      const copyBtn = document.getElementById('copy-btn');
-
-      navigator.clipboard.writeText(sharedUrl).then(() => {
-        copyBtn.classList.add('copied');
-        copyBtn.textContent = 'Copied!';
-
-        setTimeout(() => {
-          copyBtn.classList.remove('copied');
-          copyBtn.textContent = 'Copy Link';
-        }, 2000);
-      }).catch(err => {
-        console.error('Copy failed:', err);
-      });
-    }
   </script>
 </body>
 </html>`;
@@ -625,16 +514,7 @@ ${JSON.stringify(shareableData, null, 2)}
   private getModelName(model: string): string {
     const cleaned = model.replace(/-\d{8}$/, "");
 
-    const modelMap: Record<string, string> = {
-      "claude-sonnet-4-5": "Claude Sonnet 4.5",
-      "claude-opus-4-5": "Claude Opus 4.5",
-      "claude-3-5-sonnet": "Claude 3.5 Sonnet",
-      "claude-3-opus": "Claude 3 Opus",
-      "claude-3-haiku": "Claude 3 Haiku",
-      "claude-haiku-4-5": "Claude Haiku 4.5",
-    };
-
-    return modelMap[cleaned] || model;
+    return cleaned || model;
   }
 
   /**
@@ -652,7 +532,11 @@ ${JSON.stringify(shareableData, null, 2)}
       return this.getModelName(data.sessionData.modelsUsed[0]);
     }
 
-    return "Claude";
+    return "Codex";
+  }
+
+  private getCustomer(data: ReceiptData): string {
+    return data.config.customerName || data.transcriptData.sessionSlug;
   }
 
   /**

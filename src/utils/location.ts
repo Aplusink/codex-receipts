@@ -12,7 +12,13 @@ export class LocationDetector {
       return config.location;
     }
 
-    // Priority 2: IP geolocation (offline)
+    // Priority 2: Local timezone fallback (offline)
+    const timezoneLocation = this.detectLocationFromTimezone(config.timezone);
+    if (timezoneLocation) {
+      return timezoneLocation;
+    }
+
+    // Priority 3: IP geolocation
     try {
       const location = await this.detectLocationFromIP();
       if (location) {
@@ -22,7 +28,7 @@ export class LocationDetector {
       // Silent fail, use fallback
     }
 
-    // Priority 3: Fallback
+    // Priority 4: Fallback
     return "The Cloud";
   }
 
@@ -65,5 +71,32 @@ export class LocationDetector {
     } catch {
       return null;
     }
+  }
+
+  private detectLocationFromTimezone(timezone?: string): string | null {
+    const resolvedTimezone =
+      timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!resolvedTimezone) return null;
+
+    const timezoneMap: Record<string, string> = {
+      "America/New_York": "New York, NY",
+      "America/Los_Angeles": "Los Angeles, CA",
+      "America/Chicago": "Chicago, IL",
+      "America/Vancouver": "Vancouver, BC",
+      "Europe/London": "London, UK",
+      "Europe/Paris": "Paris, France",
+      "Asia/Tokyo": "Tokyo, Japan",
+      "Asia/Shanghai": "Shanghai, China",
+      "Asia/Hong_Kong": "Hong Kong",
+      "Asia/Singapore": "Singapore",
+    };
+
+    if (timezoneMap[resolvedTimezone]) {
+      return timezoneMap[resolvedTimezone];
+    }
+
+    const parts = resolvedTimezone.split("/");
+    const city = parts[parts.length - 1]?.replaceAll("_", " ");
+    return city || null;
   }
 }

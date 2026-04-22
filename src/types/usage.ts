@@ -1,5 +1,3 @@
-// ccusage JSON response types (actual format from ccusage CLI)
-
 export interface ModelBreakdown {
   modelName: string;
   inputTokens: number;
@@ -9,7 +7,7 @@ export interface ModelBreakdown {
   cost: number;
 }
 
-export interface CcusageSession {
+export interface UsageSession {
   sessionId: string;
   inputTokens: number;
   outputTokens: number;
@@ -23,8 +21,8 @@ export interface CcusageSession {
   projectPath?: string;
 }
 
-export interface CcusageResponse {
-  sessions: CcusageSession[];
+export interface UsageResponse {
+  sessions: UsageSession[];
   totals: {
     inputTokens: number;
     outputTokens: number;
