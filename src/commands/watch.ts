@@ -67,6 +67,7 @@ export class WatchCommand {
     idleSeconds: number,
   ): Promise<void> {
     if (options.onlyWhenCodexClosed && (await this.isCodexRunning())) {
+      console.log("Codex is still running; skipping receipt generation.");
       return;
     }
 
@@ -108,6 +109,10 @@ export class WatchCommand {
         spinner.fail(`Failed to generate receipt for ${thread.title}`);
         throw error;
       }
+    }
+
+    if (!changed) {
+      console.log("No eligible Codex sessions to generate.");
     }
 
     if (changed || firstRun) {
@@ -157,6 +162,18 @@ export class WatchCommand {
   }
 
   private async isCodexRunning(): Promise<boolean> {
+    if (process.platform === "darwin") {
+      try {
+        const { stdout } = await execFileAsync("osascript", [
+          "-e",
+          'application "Codex" is running',
+        ]);
+        return stdout.trim() === "true";
+      } catch {
+        // Fall through to process detection.
+      }
+    }
+
     try {
       const { stdout } = await execFileAsync("pgrep", [
         "-fil",
