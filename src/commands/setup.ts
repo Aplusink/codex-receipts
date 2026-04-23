@@ -115,6 +115,8 @@ export class SetupCommand {
     <string>watch</string>
     <string>--once</string>
     <string>--only-when-codex-closed</string>
+    <string>--idle-seconds</string>
+    <string>10</string>
     <string>--output</string>
     <string>html</string>
   </array>

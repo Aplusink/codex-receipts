@@ -22,6 +22,7 @@ export interface WatchOptions {
 
 interface WatchState {
   printedThreadIds: string[];
+  printedThreads?: Record<string, number>;
 }
 
 export class WatchCommand {
@@ -71,19 +72,20 @@ export class WatchCommand {
 
     const firstRun = !existsSync(this.statePath);
     const state = await this.loadState();
-    const printed = new Set(state.printedThreadIds);
+    const printedThreads = state.printedThreads || {};
     const threads = await this.dataFetcher.listThreads(25);
     const now = Date.now();
     let changed = false;
 
     for (const thread of threads) {
-      if (printed.has(thread.id)) continue;
+      const threadUpdatedAt = thread.updatedAt.getTime();
+      if ((printedThreads[thread.id] || 0) >= threadUpdatedAt) continue;
 
       const idleMs = now - thread.updatedAt.getTime();
       if (idleMs < idleSeconds * 1000) continue;
 
       if (firstRun) {
-        printed.add(thread.id);
+        printedThreads[thread.id] = threadUpdatedAt;
         changed = true;
         continue;
       }
@@ -99,7 +101,7 @@ export class WatchCommand {
           openBrowser: true,
         });
 
-        printed.add(thread.id);
+        printedThreads[thread.id] = threadUpdatedAt;
         changed = true;
         spinner.succeed(`Generated receipt for ${thread.title}`);
       } catch (error) {
@@ -109,7 +111,12 @@ export class WatchCommand {
     }
 
     if (changed || firstRun) {
-      await this.saveState({ printedThreadIds: [...printed].slice(-500) });
+      await this.saveState({
+        printedThreadIds: Object.keys(printedThreads).slice(-500),
+        printedThreads: Object.fromEntries(
+          Object.entries(printedThreads).slice(-500),
+        ),
+      });
     }
   }
 
@@ -127,10 +134,17 @@ export class WatchCommand {
     try {
       const content = await readFile(this.statePath, "utf-8");
       const parsed = JSON.parse(content) as Partial<WatchState>;
+      const printedThreads = parsed.printedThreads || {};
+      for (const threadId of parsed.printedThreadIds || []) {
+        if (!printedThreads[threadId]) {
+          printedThreads[threadId] = Number.MAX_SAFE_INTEGER;
+        }
+      }
       return {
         printedThreadIds: Array.isArray(parsed.printedThreadIds)
           ? parsed.printedThreadIds
           : [],
+        printedThreads,
       };
     } catch {
       return { printedThreadIds: [] };
