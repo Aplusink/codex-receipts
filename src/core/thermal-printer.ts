@@ -284,7 +284,7 @@ export class ThermalPrinterRenderer {
 
     // --- Footer ---
     b.align("left");
-    b.line(`CASHIER: ${this.getMainModel(data.sessionData)}`);
+    b.line(`CASHIER: ${this.getCashierLabel()}`);
     b.line();
     b.align("center");
     b.line("Thank you for building!");
@@ -463,6 +463,10 @@ export class ThermalPrinterRenderer {
       return this.getModelName(sessionData.modelsUsed[0]);
     }
 
+    return "Codex";
+  }
+
+  private getCashierLabel(): string {
     return "Codex";
   }
 }

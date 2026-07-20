@@ -173,6 +173,12 @@ export class NotionUploader {
             title: [{ type: "text", text: { content: title } }],
           },
         },
+        cover: {
+          type: "file_upload",
+          file_upload: {
+            id: fileUploadId,
+          },
+        },
         children: [
           {
             type: "paragraph",

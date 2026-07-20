@@ -427,7 +427,7 @@ export class HtmlRenderer {
       </div>
 
       <div class="footer">
-        <div>CASHIER: ${this.getMainModel(data)}</div>
+        <div>CASHIER: ${this.getCashierLabel()}</div>
         <div class="footer-message">Thank you for building!</div>
       </div>
     </div>
@@ -532,6 +532,10 @@ ${JSON.stringify(shareableData, null, 2)}
       return this.getModelName(data.sessionData.modelsUsed[0]);
     }
 
+    return "Codex";
+  }
+
+  private getCashierLabel(): string {
     return "Codex";
   }
 

@@ -131,7 +131,7 @@ export class ReceiptGenerator {
     lines.push("");
 
     // Footer
-    lines.push(`CASHIER: ${this.getMainModel(data.sessionData)}`);
+    lines.push(`CASHIER: ${this.getCashierLabel()}`);
     lines.push("");
     lines.push(this.centerText("Thank you for building!", 35));
     lines.push("");
@@ -271,6 +271,10 @@ export class ReceiptGenerator {
       return this.getModelName(sessionData.modelsUsed[0]);
     }
 
+    return "Codex";
+  }
+
+  private getCashierLabel(): string {
     return "Codex";
   }
 

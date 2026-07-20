@@ -410,7 +410,7 @@ function buildHtml(data) {
     <div class="total"><div>TOTAL</div><div></div><div>${formatCurrency(data.totalCost)}</div></div>
 
     <div class="footer">
-      CASHIER: ${escapeHtml(data.model)}<br>
+      CASHIER: Codex<br>
       Thank you for building!
     </div>
   </div>
@@ -493,6 +493,10 @@ async function uploadToNotion(imagePath, receiptData, config) {
           Name: {
             title: [{ type: "text", text: { content: `Codex receipt ${date} ${formatCurrency(receiptData.totalCost)}` } }],
           },
+        },
+        cover: {
+          type: "file_upload",
+          file_upload: { id: uploadPayload.id },
         },
         children: [
           {
