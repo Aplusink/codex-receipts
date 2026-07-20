@@ -35,7 +35,7 @@ async function main() {
   let changed = false;
 
   for (const thread of threads) {
-    const updatedAtMs = thread.updatedAt * 1000;
+    const updatedAtMs = Number(thread.updated_at || thread.updatedAt || 0) * 1000;
     if ((state.printedThreads[thread.id] || 0) >= updatedAtMs) {
       continue;
     }
@@ -551,3 +551,9 @@ async function parseResponse(response) {
   }
   return parsed;
 }
+
+main().catch((error) => {
+  const message = error instanceof Error ? error.stack || error.message : String(error);
+  console.error(`${LOG_PREFIX} ${message}`);
+  process.exitCode = 1;
+});
