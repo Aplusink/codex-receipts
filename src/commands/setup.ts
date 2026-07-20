@@ -41,8 +41,8 @@ export class SetupCommand {
     const spinner = ora("Installing Codex watcher LaunchAgent...").start();
     const plistPath = this.getCodexWatcherPlistPath();
     const nodePath = process.execPath;
-    const cliPath = resolve(process.argv[1] || "bin/codex-receipts.js");
     const logDir = join(process.env.HOME || "", ".codex-receipts", "logs");
+    const launcherPath = resolve(process.cwd(), "bin", "codex-watch-launchd.cjs");
 
     try {
       await mkdir(dirname(plistPath), { recursive: true });
@@ -50,7 +50,7 @@ export class SetupCommand {
 
       const plist = this.buildCodexWatcherPlist({
         nodePath,
-        cliPath,
+        cliPath: launcherPath,
         intervalSeconds: 60,
         stdoutPath: join(logDir, "codex-watch.out.log"),
         stderrPath: join(logDir, "codex-watch.err.log"),
@@ -65,6 +65,7 @@ export class SetupCommand {
       spinner.succeed("Codex watcher installed");
       console.log(chalk.green("\n✓ Codex receipts will be generated after Codex closes"));
       console.log(chalk.gray(`  LaunchAgent: ${plistPath}`));
+      console.log(chalk.gray(`  Launcher: ${launcherPath}`));
       console.log(chalk.gray(`  Logs: ${logDir}\n`));
     } catch (error) {
       spinner.fail("Codex watcher setup failed");
@@ -112,13 +113,6 @@ export class SetupCommand {
   <array>
     <string>${this.escapePlist(options.nodePath)}</string>
     <string>${this.escapePlist(options.cliPath)}</string>
-    <string>watch</string>
-    <string>--once</string>
-    <string>--only-when-codex-closed</string>
-    <string>--idle-seconds</string>
-    <string>10</string>
-    <string>--output</string>
-    <string>html</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
